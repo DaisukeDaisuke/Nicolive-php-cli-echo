@@ -76,7 +76,7 @@ function resolveUserID($url): ?string{
 	}
 	$userId = $match[1];
 
-	echo "get: https://live.nicovideo.jp/front/api/v1/user-broadcast-history?providerId={$userId}&providerType=user&limit=1\n";
+	echo "info > get: https://live.nicovideo.jp/front/api/v1/user-broadcast-history?providerId={$userId}&providerType=user&limit=1\n";
 	$api = file_get_contents("https://live.nicovideo.jp/front/api/v1/user-broadcast-history?providerId={$userId}&providerType=user&limit=1");
 	if($api === false){
 		return null;
@@ -91,26 +91,18 @@ function resolveUserID($url): ?string{
 	if($record === null){
 		return null;
 	}
-	if($record['program']['schedule']['status'] !== "ON_AIR"){
-		return null;
-	}
 	return $record['id']['value'];
 }
 
 
-$url = 'lv345542146';
-//$url = "https://www.nicovideo.jp/user/48495285?ref=pc_userpage_menu";
+$url = 'lv345566270';
+$url = "https://www.nicovideo.jp/user/5299668/live_programs";
 $id = resolveUserID($url);
-
-if($id === ""){
-	throw new RuntimeException("Error: url not found");
-}
 
 $wssurl = getwssurl($id ?? $url);
 if($wssurl === ""|| $wssurl === null){
-	throw new RuntimeException("Error: url not found");
+	throw new RuntimeException("Error: url not found or ended stream");
 }
-
 $test = new nikowss($wssurl, $id ?? $url);
 $loop = $test->getLoop();
 //$loop->addTimer(10, function () use ($test) {
@@ -121,7 +113,7 @@ $test->startLoop();
 
 
 function getwssurl(string $id) : ?string{
-	echo "get: https://live.nicovideo.jp/watch/".$id."\n";
+	echo "info > get: https://live.nicovideo.jp/watch/".$id."\n";
 	$htmlContent = file_get_contents("https://live.nicovideo.jp/watch/".$id);
 
 // DOMDocumentを使ってHTMLを解析
@@ -140,6 +132,9 @@ function getwssurl(string $id) : ?string{
 		// JSONをパースしてPHPの連想配列に変換
 		try{
 			$dataObject = json_decode($jsonData, true, JSON_THROW_ON_ERROR);
+//			if($dataObject["status"] === "ENDED"){
+//				return null;
+//			}
 			return $dataObject["site"]["relive"]["webSocketUrl"];
 		}catch(Exception $e){
 			echo "Failed to parse JSON data: ".$e->getMessage();
@@ -228,36 +223,34 @@ class nikowss{
 			}elseif($message->getMessage()?->getSimpleNotification() !== null){
 				$notification = $message->getMessage()->getSimpleNotification();
 				if($notification->getProgramExtended() !== null&&$notification->getProgramExtended() !== ""){
-					echo "告知: ".$notification?->getProgramExtended()."\n";
+					echo "! 告知: ".$notification?->getProgramExtended()."\n";
 				}elseif($notification->getIchiba() !== null&&$notification->getIchiba() !== ""){
-					var_dump($notification->getIchiba());
-					echo "ニコゲー開始告知: 【放送ネタ】".$notification->getIchiba()."\n";
+					echo "! ニコゲー開始告知: 【放送ネタ】".$notification->getIchiba()."\n";
 				}elseif($notification->getEmotion() !== null&&$notification->getEmotion() !== ""){
-					var_dump($notification->getEmotion());
+					var_dump($notification->getEmotion());//未実装
 					$this->emotionBuffer[$notification->getEmotion()] ??= 0;
 					++$this->emotionBuffer[$notification->getEmotion()];
 				}elseif($notification->getRankingIn() !== ""&&$notification->getRankingIn() !== ""){
-					var_dump($message);
-					echo $notification->getRankingIn()."\n";
+					echo "! ".$notification->getRankingIn()."\n";
 				}elseif($notification->getVisited() !== null&&$notification->getVisited() !== ""){
+					echo "! ".$notification->getVisited()."\n";  //「ゲーム」が好きな1人が来場しました
+				}else{
 					var_dump($message);
-					echo $notification->getVisited()."\n";
 				}
 			}elseif($message->getMessage()?->getGift() !== null){
 				$gift = $message->getMessage()->getGift();
-				echo "ギフトを検知しました: ".($gift->getMessage() ?? "")."\n";
+				echo "! ギフトを検知しました: ".($gift->getMessage() ?? "")."\n";
 				var_dump($message);
 			}elseif($message->getMessage()?->getNicoad() !== null){
 				$nicoad = $message->getMessage()->getNicoad();
 				var_dump($message);
 				//if($nicoad->getVersions() === "v0")
-				echo "ニコニ広告を検知しました: ";
+				echo "! ニコニ広告を検知しました: \n";
 			}
 		}elseif($message->getState() !== null){
-			//var_dump($message->getState());
 			$announce = $message->getState()?->getMarque()?->getDisplay()?->getOperatorComment();
 			if($announce !== null){
-				echo "放送者コメント: ".$announce->getContent()." : ".$announce->getLink()."\n";
+				echo "! 放送者コメント: ".$announce->getContent()." : ".$announce->getLink()."\n";
 			}
 			$vote = $message->getState()->getEnquete();
 			if($vote?->getStatus() !== null){
@@ -281,11 +274,11 @@ class nikowss{
 					}
 				}
 				if($status !== "close"){
-					echo trim($result)."\n";
+					echo "! ".trim($result)."\n";
 				}
 			}
 		}else{
-			var_dump($message);
+			//var_dump($message);
 		}
 
 	}
@@ -293,7 +286,7 @@ class nikowss{
 	public function garbageCollectionSegmentClient() : void{
 		foreach($this->segmentServerClient as $key => $item){
 			if($item->isCloned()){
-				echo "garbageCollectioning segmentServerClient\n";
+				//echo "garbageCollectioning segmentServerClient\n";
 				unset($this->segmentServerClient[$key]);
 			}
 		}
@@ -322,7 +315,7 @@ class nikowss{
 
 		($this->connector)($this->wssurl)->then(function(WebSocket $conn){
 			$this->conn = $conn;
-			echo "Connected to WebSocket server.\n";
+			echo "info > Connected to WebSocket server!\n";
 
 			// 接続時にメッセージを送信
 			$message = json_encode([
@@ -342,7 +335,7 @@ class nikowss{
 				]
 			]);
 			$conn->send($message);
-			echo "Message sent: $message\n";
+			//echo "Message sent: $message\n";
 
 			// メッセージ受信時の処理
 			$conn->on('message', function($message){
@@ -393,7 +386,7 @@ class nikowss{
 
 	public function onMessageServerMessage(array $url) : void{
 		$this->messageServerUri = $url["viewUri"];
-		var_dump("found comment server: ".$this->messageServerUri);
+		echo "info > found comment server: ".$this->messageServerUri."\n";
 		$this->messageServerClient->connectToMessageServer($this->messageServerUri);
 	}
 
@@ -402,14 +395,14 @@ class nikowss{
 		$this->loop->addPeriodicTimer($sec, function() use ($sec){
 			$pingMessage = json_encode(["type" => "keepSeat"]);
 			$this->conn->send($pingMessage);
-			echo "send startPinger $sec.\n";
+			//echo "send startPinger $sec.\n";
 		});
 
 	}
 
 
 	private function onRawMessage($message){
-		echo "Processing raw message: $message\n";
+		//echo "Processing raw message: $message\n";
 
 		$message = json_decode($message, true);
 		//var_dump($message);
@@ -442,7 +435,7 @@ class nikowss{
 
 	private function onPing() : void{
 		$this->conn->send(json_encode(["type" => "pong"]));
-		echo "pong sended\n";
+		//echo "pong sended\n";
 	}
 
 	public function isConnected() : bool{
@@ -460,7 +453,8 @@ class nikowss{
 
 
 class SegmentServerClient{
-	static int $debugcounter = 0;
+	private static int $debugcounter = 0;
+	private static $hasConnected = false;
 	private string $segmentServerUri;
 	private ?Request $request;
 	private ?BinaryStreamChunk $stream = null;
@@ -470,7 +464,18 @@ class SegmentServerClient{
 
 	}
 
+	public static function isHasConnected() : bool{
+		return self::$hasConnected;
+	}
+
+	public static function setHasConnected(bool $hasConnected) : void{
+		self::$hasConnected = $hasConnected;
+	}
+
 	private function connect(){
+		if(!self::isHasConnected()){
+			echo "info > Connect to the first segment server!\n";
+		}
 		if(!isset($this->segmentServerUri)){
 			throw new \RuntimeException("segmentServerUri is null");
 		}
@@ -484,11 +489,18 @@ class SegmentServerClient{
 	private function mainLoop(){
 		$this->stream = new BinaryStreamChunk();
 		$client = new Client($this->loop);
-		echo "GET: ".$this->segmentServerUri."\n";
+		//echo "GET: ".$this->segmentServerUri."\n";
 		$this->request = $client->request('GET', $this->segmentServerUri);
 
 		$this->request->on('response', function(Response $response){
-			echo "Response received with status code: ".$response->getCode().PHP_EOL;
+			if(!self::isHasConnected()){
+				echo "info > Ready to receive comments!\n";
+				self::setHasConnected(true);
+			}
+
+			if($response->getCode() !== 200){
+				echo "Response received with status code: ".$response->getCode().PHP_EOL;
+			}
 
 			$response->on('data', function($chunk){
 				$this->stream->addBuffer($chunk);
@@ -498,7 +510,7 @@ class SegmentServerClient{
 			});
 
 			$response->on('end', function(){
-				echo "Stream ended.".PHP_EOL;
+				//echo "Stream ended.".PHP_EOL;
 				$this->disconnect();
 			});
 		});
@@ -556,7 +568,8 @@ class SegmentServerClient{
 }
 
 class MessageServerClient{
-	static int $debugcounter = 0;
+	private static int $debugcounter = 0;
+	private static $hasConnected = false;
 	private string $nextStreamAt = "now";
 	private ?string $messageServerUri = null;
 
@@ -567,6 +580,14 @@ class MessageServerClient{
 
 	}
 
+	public static function isHasConnected() : bool{
+		return self::$hasConnected;
+	}
+
+	public static function setHasConnected(bool $hasConnected) : void{
+		self::$hasConnected = $hasConnected;
+	}
+
 	public function connectToMessageServer(string $messageServerUri){
 		$this->disconnect();
 		$this->messageServerUri = $messageServerUri;
@@ -574,6 +595,11 @@ class MessageServerClient{
 	}
 
 	private function connect(){
+		if(!self::isHasConnected()){
+			echo "info > Connect to the first message server!\n";
+			self::setHasConnected(true);
+		}
+
 		if(!isset($this->messageServerUri)){
 			throw new \RuntimeException("messageServerUri is null");
 		}
@@ -586,11 +612,13 @@ class MessageServerClient{
 	private function mainLoop(){
 		$this->stream = new BinaryStreamChunk();
 		$client = new Client($this->loop);
-		echo "GET: ".$this->messageServerUri."?at=".$this->nextStreamAt."\n";
+		//echo "GET: ".$this->messageServerUri."?at=".$this->nextStreamAt."\n";
 		$this->request = $client->request('GET', $this->messageServerUri."?at=".$this->nextStreamAt);
 
 		$this->request->on('response', function(Response $response){
-			echo "Response received with status code: ".$response->getCode().PHP_EOL;
+			if($response->getCode() !== 200){
+				echo "Response received with status code: ".$response->getCode().PHP_EOL;
+			}
 
 			$response->on('data', function($chunk){
 				$this->stream->addBuffer($chunk);
@@ -600,7 +628,7 @@ class MessageServerClient{
 			});
 
 			$response->on('end', function(){
-				echo "Stream ended.".PHP_EOL;
+				//echo "Stream ended.".PHP_EOL;
 				$this->disconnect();
 				$this->mainLoop();
 			});
@@ -620,6 +648,13 @@ class MessageServerClient{
 			$chunkedEntry->mergeFromString($binaryData);
 			($this->onDataReceived)($chunkedEntry);
 			//$this->processChunkEntry($chunkedEntry);
+		}
+		$this->tryClearBuffer();
+	}
+
+	public function tryClearBuffer(): void{
+		if(strlen($this->stream->getBuffer()) === $this->stream->getOffset()){
+			$this->stream = new BinaryStreamChunk();
 		}
 	}
 
