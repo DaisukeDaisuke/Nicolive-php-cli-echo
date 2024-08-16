@@ -1,0 +1,18 @@
+{
+    "require": {
+        "react/socket": "^1.9",
+        "react/event-loop": "^1.2",
+        "ratchet/pawl": "^0.4",
+        "react/http-client": "*",
+        "react/promise-stream": "^1.7",
+        "pocketmine/binaryutils": "^0.2.6",
+        "google/protobuf": "^4.27",
+        "ext-dom": "*",
+        "pocketmine/errorhandler": "^0.7.0"
+    },
+    "autoload": {
+        "classmap": [
+            "generated/"
+        ]
+    }
+}
