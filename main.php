@@ -132,9 +132,6 @@ function getwssurl(string $id) : ?string{
 		// JSONをパースしてPHPの連想配列に変換
 		try{
 			$dataObject = json_decode($jsonData, true, JSON_THROW_ON_ERROR);
-//			if($dataObject["status"] === "ENDED"){
-//				return null;
-//			}
 			return $dataObject["site"]["relive"]["webSocketUrl"];
 		}catch(Exception $e){
 			echo "Failed to parse JSON data: ".$e->getMessage();
@@ -231,7 +228,7 @@ class nikowss{
 					$this->emotionBuffer[$notification->getEmotion()] ??= 0;
 					++$this->emotionBuffer[$notification->getEmotion()];
 				}elseif($notification->getRankingIn() !== ""&&$notification->getRankingIn() !== ""){
-					echo "! ".$notification->getRankingIn()."\n";
+					echo "! ".$notification->getRankingIn()."\n"; // 第22位にランクインしました
 				}elseif($notification->getVisited() !== null&&$notification->getVisited() !== ""){
 					echo "! ".$notification->getVisited()."\n";  //「ゲーム」が好きな1人が来場しました
 				}else{
